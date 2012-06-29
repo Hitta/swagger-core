@@ -16,6 +16,7 @@
 
 package com.wordnik.swagger.core
 
+import scala.util.control.Breaks._
 import com.wordnik.swagger.core._
 import com.wordnik.swagger.core.util._
 import com.wordnik.swagger.core.ApiValues._
@@ -54,7 +55,12 @@ trait ApiSpecParserTrait extends BaseApiParser {
   val TRAIT = "trait"
 
   // implement this to detect HTTP method type
+//  def parseHttpMethod(method: Method, apiOperation: ApiOperation): String = {
+//    LOGGER.debug("YYYYYYYYYYYYYYYYYYYYYYYYYYYY HTTP YYYYYYYYYYYYYYYYY");
+//    return "GET"
+//  }
   def parseHttpMethod(method: Method, apiOperation: ApiOperation): String
+
 
   def parse(): Documentation = {
     if (apiEndpoint != null)
@@ -67,6 +73,7 @@ trait ApiSpecParserTrait extends BaseApiParser {
   }
 
   def parseApiParam(docParam: DocumentationParameter, apiParam: ApiParam, method: Method) {
+    LOGGER.debug("YYYYYYYYY Method:" + method + "++++++ Parameter: " + docParam.name)
     docParam.name = readString(apiParam.name, docParam.name)
     docParam.description = readString(apiParam.value)
     docParam.defaultValue = readString(apiParam.defaultValue)
@@ -84,12 +91,27 @@ trait ApiSpecParserTrait extends BaseApiParser {
   }
 
   def parseMethod(method: Method): Any = {
-    val apiOperation = method.getAnnotation(classOf[ApiOperation])
-    val apiErrors = method.getAnnotation(classOf[ApiErrors])
-    val isDeprecated = method.getAnnotation(classOf[Deprecated])
+    val meth = method;
 
-    LOGGER.debug("parsing method " + method.getName)
-    if (apiOperation != null && method.getName != "getHelp") {
+//    var apiOperation = meth.getAnnotation(classOf[ApiOperation])
+//    LOGGER.debug("Y----Y----Y---Y apiOperation:" + apiOperation)
+//    if (apiOperation == null) {
+//      val methTmp = getPapaMethod(meth);
+//      apiOperation = methTmp.getAnnotation(classOf[ApiOperation])
+//      LOGGER.debug("Y----Y----Y---Y apiOperation2:" + apiOperation)
+//    }
+
+    var apiOperation = getApiOperationAnnotationInPapaMethod(meth)
+
+
+    //    var types = method.getParameterTypes()
+    //    types.foreach(typ => {LOGGER.debug("Y----Y----Y---Y type:" + typ)})
+
+    val apiErrors = meth.getAnnotation(classOf[ApiErrors])
+    val isDeprecated = meth.getAnnotation(classOf[Deprecated])
+
+    LOGGER.debug("parsing method " + meth.getName)
+    if (apiOperation != null && meth.getName != "getHelp") {
       // Read the Operation
       val docOperation = new DocumentationOperation
 
@@ -97,12 +119,16 @@ trait ApiSpecParserTrait extends BaseApiParser {
       if (isDeprecated != null) docOperation.deprecated = true
 
       if (apiOperation != null) {
-        docOperation.httpMethod = parseHttpMethod(method, apiOperation)
+        LOGGER.debug("YYYYYYYYYYYYYYYYYYYYYYYYYYYY TIME TO PARSE HTTP METHOD:"  );
+        docOperation.httpMethod = parseHttpMethod(meth, apiOperation)
+        LOGGER.debug("YYYYYYYYYYYYYYYYYYYYYYYYYYYYapiOperation.value:" + apiOperation.value);
         docOperation.summary = readString(apiOperation.value)
+        LOGGER.debug("YYYYYYYYYYYYYYYYYYYYYYYYYYYYapiOperation.notes:" +apiOperation.notes);
         docOperation.notes = readString(apiOperation.notes)
         docOperation.setTags(toObjectList(apiOperation.tags))
-        docOperation.nickname = method.getName
+        docOperation.nickname = meth.getName
         val apiResponseValue = readString(apiOperation.responseClass)
+        LOGGER.debug("YYYYYYYYYYYYYYYYYYYYYYYYYYYYapiOperation.responseClass:" +apiOperation.responseClass);
         val isResponseMultiValue = apiOperation.multiValueResponse
 
         docOperation.setResponseTypeInternal(apiResponseValue)
@@ -117,7 +143,7 @@ trait ApiSpecParserTrait extends BaseApiParser {
 
       // Read method annotations for implicit api params which are not declared as actual argments to the method
       // Essentially ApiParamImplicit annotations on method
-      val methodAnnotations = method.getAnnotations
+      val methodAnnotations = meth.getAnnotations
       for (ma <- methodAnnotations) {
         ma match {
           case pSet: ApiParamsImplicit => {
@@ -151,10 +177,17 @@ trait ApiSpecParserTrait extends BaseApiParser {
         }
       }
 
+
+
+            LOGGER.debug("YYYYYYYYYYYY%%%%%%%%%%%%%%%% READ PARAMS IN meth: " + meth.getName())
+      LOGGER.debug("YYYYYYYYYYYY%%%%%%%%%%%%%%%% meth.getClass(): " + meth.getDeclaringClass())
       // Read the params and add to Operation
-      val paramAnnotationDoubleArray = method.getParameterAnnotations
-      val paramTypes = method.getParameterTypes
-      val genericParamTypes = method.getGenericParameterTypes
+      var paramAnnotationDoubleArray = meth.getParameterAnnotations
+      paramAnnotationDoubleArray = getParamAnnotationInPapaMethod(meth)
+
+
+      val paramTypes = meth.getParameterTypes
+      val genericParamTypes = meth.getGenericParameterTypes
       var counter = 0
       var ignoreParam = false
       paramAnnotationDoubleArray.foreach(paramAnnotations => {
@@ -173,7 +206,7 @@ trait ApiSpecParserTrait extends BaseApiParser {
           case e: Exception => LOGGER.error("Unable to determine datatype for param " + counter + " in method " + method, e)
         }
 
-        ignoreParam = processParamAnnotations(docParam, paramAnnotations, method)
+        ignoreParam = processParamAnnotations(docParam, paramAnnotations, meth)
 
         if (paramAnnotations.length == 0) {
           ignoreParam = true
@@ -187,11 +220,11 @@ trait ApiSpecParserTrait extends BaseApiParser {
       })
 
       // Get Endpoint
-      val docEndpoint = getEndPoint(documentation, getPath(method))
+      val docEndpoint = getEndPoint(documentation, getPath(meth))
 
       // Add Operation to Endpoint
-      docEndpoint.addOperation(processOperation(method, docOperation))
-      LOGGER.debug("added operation " + docOperation + " from method " + method.getName)
+      docEndpoint.addOperation(processOperation(meth, docOperation))
+      LOGGER.debug("added operation " + docOperation + " from method " + meth.getName)
 
       // Read the Errors and add to Response
       if (apiErrors != null) {
@@ -232,4 +265,74 @@ trait ApiSpecParserTrait extends BaseApiParser {
         simpleName
     }
   }
+
+
+
+
+
+
+  private def getPapaMethod(method: Method): Method = {
+    var meth = method
+         LOGGER.debug("Y----Y----Y---Y METHOD:" + method.getName())
+    LOGGER.debug("Y----Y----Y---Y METHOD.getDeclaringClass:" + method.getDeclaringClass())
+
+    LOGGER.debug("Y>>>>>>>>>>>>>>>>>> " + method.getDeclaringClass().getCanonicalName())
+
+    if (method.getDeclaringClass().getSuperclass() != null && method.getDeclaringClass().getCanonicalName().contains("EnhancerByGuice")) {
+      LOGGER.debug("Y>>>>>>>>>>>>>>>>>> 1")
+      //      // FIXME
+      //      var parameters: Array[Class[_]] = method.getParameterTypes()
+      //      parameters.foreach(param => {LOGGER.debug("Y----Y----Y---Y type:" + param)})
+      //
+      //      apiOperation = method.getDeclaringClass().getSuperclass().getMethod(method.getName(), parameters.asInstanceOf[Class]).getAnnotation(classOf[ApiOperation])
+      LOGGER.debug("Y>>>>>>>>>>>>>>>>>> superclass: " + method.getDeclaringClass().getSuperclass())
+      var methods = method.getDeclaringClass().getSuperclass().getMethods()
+      var i = 0
+      var j = -1
+      LOGGER.debug("Y>>>>>>>>>>>>>>>>>> 2")
+      breakable {
+        LOGGER.debug("Y>>>>>>>>>>>>>>>>>> 3")
+        for (i <- 0 until (methods.length - 1)) {
+          LOGGER.debug("Y>>>>>>>>>>>>>>>>>> 4: " + i)
+          if (methods(i).getName().equals(method.getName())) {
+            j = i
+            LOGGER.debug("Y>>>>>>>>>>>>>>>>>> FOUND:" + j)
+            break
+          }
+        }
+      }
+      if (j >= 0) {
+        LOGGER.debug("Y>>>>>>>>>>>>>>>>>> YES:" + j)
+        meth = methods(j)
+      }
+    }
+
+    LOGGER.debug("Y----Y----Y---Y METHOD2:" + meth.getName())
+    LOGGER.debug("Y----Y----Y---Y METHOD2.getDeclaringClass:" + meth.getDeclaringClass())
+
+    return meth;
+  }
+
+  private def getApiOperationAnnotationInPapaMethod(method: Method): ApiOperation = {
+    var apiOperation = method.getAnnotation(classOf[ApiOperation])
+    LOGGER.debug("Y----Y----Y---Y apiOperation:" + apiOperation)
+    if (apiOperation == null) {
+      val methTmp = getPapaMethod(method);
+      apiOperation = methTmp.getAnnotation(classOf[ApiOperation])
+      LOGGER.debug("Y----Y----Y---Y apiOperation2:" + apiOperation)
+    }
+    return apiOperation
+  }
+
+
+  private def getParamAnnotationInPapaMethod(method: Method) :Array[Array[Annotation]] = {
+
+      val methTmp = getPapaMethod(method);
+      val params = methTmp.getParameterAnnotations
+
+    return params
+  }
+
+
+
 }

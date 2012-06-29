@@ -76,38 +76,49 @@ class JaxrsApiSpecParser(val _hostClass: Class[_], _apiVersion: String, _swagger
   override def basePath = _basePath
   override def resourcePath = _resourcePath
 
+
+
   LOGGER.debug(hostClass + ", apiVersion: " + apiVersion + ", swaggerVersion: " + swaggerVersion + ", basePath: " + basePath + ", resourcePath: " + resourcePath)
 
   val documentation = new Documentation
-  val apiEndpoint = hostClass.getAnnotation(classOf[Api])
+  val apiEndpoint = getApiAnnotationRecursively(hostClass)
+  //val apiEndpoint = hostClass.getAnnotation(classOf[Api])
 
   override def processParamAnnotations(docParam: DocumentationParameter, paramAnnotations: Array[Annotation], method: Method): Boolean = {
+    LOGGER.debug("YYYYYYY+++++++++++++++++++++++ JaxrsApiSpecParser...processParamAnnotations")
     var ignoreParam = false
     for (pa <- paramAnnotations) {
+      LOGGER.debug("YYYYYYY+++++++++++++++++++++++ pa:" + pa)
       pa match {
         case apiParam: ApiParam => parseApiParam(docParam, apiParam, method)
         case wsParam: QueryParam => {
+          LOGGER.debug("YYYYYYY+++++++++++++++++++++++ JaxrsApiSpecParser...processParamAnnotations 1")
           docParam.name = readString(wsParam.value, docParam.name)
           docParam.paramType = readString(TYPE_QUERY, docParam.paramType)
         }
         case wsParam: PathParam => {
+          LOGGER.debug("YYYYYYY+++++++++++++++++++++++ JaxrsApiSpecParser...processParamAnnotations 2")
           docParam.name = readString(wsParam.value, docParam.name)
           docParam.required = true
           docParam.paramType = readString(TYPE_PATH, docParam.paramType)
         }
         case wsParam: MatrixParam => {
+          LOGGER.debug("YYYYYYY+++++++++++++++++++++++ JaxrsApiSpecParser...processParamAnnotations 3")
           docParam.name = readString(wsParam.value, docParam.name)
           docParam.paramType = readString(TYPE_MATRIX, docParam.paramType)
         }
         case wsParam: HeaderParam => {
+          LOGGER.debug("YYYYYYY+++++++++++++++++++++++ JaxrsApiSpecParser...processParamAnnotations 4")
           docParam.name = readString(wsParam.value, docParam.name)
           docParam.paramType = readString(TYPE_HEADER, docParam.paramType)
         }
         case wsParam: FormParam => {
+          LOGGER.debug("YYYYYYY+++++++++++++++++++++++ JaxrsApiSpecParser...processParamAnnotations 5")
           docParam.name = readString(wsParam.value, docParam.name)
           docParam.paramType = readString(TYPE_FORM, docParam.paramType)
         }
         case wsParam: CookieParam => {
+          LOGGER.debug("YYYYYYY+++++++++++++++++++++++ JaxrsApiSpecParser...processParamAnnotations 6")
           docParam.name = readString(wsParam.value, docParam.name)
           docParam.paramType = readString(TYPE_COOKIE, docParam.paramType)
         }
@@ -119,27 +130,41 @@ class JaxrsApiSpecParser(val _hostClass: Class[_], _apiVersion: String, _swagger
   }
 
   override def getPath(method: Method): String = {
+    LOGGER.debug("YYYYYYY JaxrsApiSpecParser....2")
     val wsPath = method.getAnnotation(classOf[javax.ws.rs.Path])
     val path = apiEndpoint.value + JaxrsApiReader.FORMAT_STRING + (if (wsPath == null) "" else wsPath.value)
     path
   }
 
   override def parseHttpMethod(method: Method, apiOperation: ApiOperation): String = {
-    if (apiOperation.httpMethod() != null && apiOperation.httpMethod().trim().length() > 0)
-      apiOperation.httpMethod().trim()
-    else {
-      val wsGet = method.getAnnotation(classOf[javax.ws.rs.GET])
-      val wsDelete = method.getAnnotation(classOf[javax.ws.rs.DELETE])
-      val wsPost = method.getAnnotation(classOf[javax.ws.rs.POST])
-      val wsPut = method.getAnnotation(classOf[javax.ws.rs.PUT])
-      val wsHead = method.getAnnotation(classOf[javax.ws.rs.HEAD])
+    LOGGER.debug("YYYYYYY JaxrsApiSpecParser....3")
+    return "GET"
+//    if (apiOperation.httpMethod() != null && apiOperation.httpMethod().trim().length() > 0)
+//      apiOperation.httpMethod().trim()
+//    else {
+//      val wsGet = method.getAnnotation(classOf[javax.ws.rs.GET])
+//      val wsDelete = method.getAnnotation(classOf[javax.ws.rs.DELETE])
+//      val wsPost = method.getAnnotation(classOf[javax.ws.rs.POST])
+//      val wsPut = method.getAnnotation(classOf[javax.ws.rs.PUT])
+//      val wsHead = method.getAnnotation(classOf[javax.ws.rs.HEAD])
+//
+//      if (wsGet != null) ApiMethodType.GET
+//      else if (wsDelete != null) ApiMethodType.DELETE
+//      else if (wsPost != null) ApiMethodType.POST
+//      else if (wsPut != null) ApiMethodType.PUT
+//      else if (wsHead != null) ApiMethodType.HEAD
+//      else null
+//    }
+  }
 
-      if (wsGet != null) ApiMethodType.GET
-      else if (wsDelete != null) ApiMethodType.DELETE
-      else if (wsPost != null) ApiMethodType.POST
-      else if (wsPut != null) ApiMethodType.PUT
-      else if (wsHead != null) ApiMethodType.HEAD
-      else null
+  private def getApiAnnotationRecursively(clazz: Class[_]): Api = {
+    if (clazz == null) return null;
+    //logger.debug("YYYYYYY SEARCH FOR ANNOTATION @Api in class: " + clazz.toString())
+    var apiAnnotation: Api = clazz.getAnnotation(classOf[Api])
+    if (apiAnnotation == null) {
+      val clazzTemp: Class[_ >: _] = clazz.getSuperclass
+      apiAnnotation = getApiAnnotationRecursively(clazzTemp)
     }
+    return apiAnnotation
   }
 }

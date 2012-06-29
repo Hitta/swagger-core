@@ -1,17 +1,17 @@
 /**
- *  Copyright 2012 Wordnik, Inc.
+ * Copyright 2012 Wordnik, Inc.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.wordnik.swagger.jaxrs
@@ -27,6 +27,7 @@ import javax.ws.rs.core.{ UriInfo, HttpHeaders, Context, Response }
 import javax.servlet.ServletConfig
 
 import scala.collection.JavaConversions._
+import java.lang.annotation.Annotation
 
 trait ApiListing {
   private val logger = LoggerFactory.getLogger(classOf[ApiListing])
@@ -61,14 +62,20 @@ trait ApiListing {
 
     val allApiDoc = new Documentation
     resources.foreach(resource => {
+      logger.debug("YYYYY----------------------------------")
       val wsPath = resource.getAnnotation(classOf[Api])
       logger.debug("processing resource path " + wsPath)
+      if (wsPath != null) {
+        logger.debug("YYYYY wsPath.value: " + wsPath.value)
+        logger.debug("YYYYY wsPath.description(): " + wsPath.description())
+      }
       if (null != wsPath && wsPath.value != JaxrsApiReader.LIST_RESOURCES_PATH) {
         val path = {
           if ("" != wsPath.listingPath) wsPath.listingPath
           else wsPath.value + JaxrsApiReader.FORMAT_STRING
         }
-
+        logger.debug("YYYYY wsPath.value: " + wsPath.value)
+        logger.debug("YYYYY path: " + path)
         logger.debug("adding api " + path + ", " + wsPath.description())
 
         val shouldAddDocumentation = {
@@ -104,32 +111,50 @@ trait ApiListing {
 
           // nothing found, check produces type
           var hasMatch = false
-          resource.getAnnotation(classOf[javax.ws.rs.Produces]).value.foreach(rt => {
-            if (resourceListingType.contains(rt)) {
-              logger.debug("matched " + rt)
+
+          logger.debug("YYYYYYY Resource = " + resource)
+          val produceAnnotation = getProduceAnnotationRecursively(resource)
+
+          //resource.getAnnotation(classOf[javax.ws.rs.Produces]).value.foreach(rt => {
+          produceAnnotation.value.foreach(rt => {
+
+            logger.debug("YYYYYYY rt " + rt)
+            var mediaType: String = rt;
+            if (rt.indexOf(';') >= 0) {
+                mediaType = rt.substring(0, rt.indexOf(';'));
+            }
+            if (resourceListingType.contains(mediaType)) {
+              logger.debug("matched " + mediaType)
               hasMatch = true
-            } else logger.debug("no match on " + rt)
+            } else logger.debug("no match on " + mediaType)
           })
           hasMatch
         }
 
         if (!hasCompatibleMediaType) logger.debug("no compatible media types")
 
+        logger.debug("YYYYYYY shouldAddDocumentation =" + shouldAddDocumentation)
+        logger.debug("YYYYYYY hasCompatibleMediaType =" + hasCompatibleMediaType)
         if (shouldAddDocumentation && hasCompatibleMediaType) {
           // need to use the actual path (wsPath.value), not the listing path (wsPath.path)
           val realPath = wsPath.value
           logger.debug(path + ", " + wsPath.value)
           var api = new DocumentationEndPoint(path, wsPath.description())
+          logger.debug("YYYYYYY !isApiAdded(allApiDoc, api) =" + !isApiAdded(allApiDoc, api))
           if (!isApiAdded(allApiDoc, api)) {
+            logger.debug("YYYYYYY !isApiAdded(allApiDoc, api) = TRUE")
             if (null != apiFilter) {
+              logger.debug("YYYYYYY apiFilter = " + apiFilter.toString())
               apiFilter match {
                 case apiAuthFilter: ApiAuthorizationFilter => {
+                  logger.debug("YYYY case apiAuthFilter")
                   if (apiAuthFilter.authorizeResource(realPath, headers, uriInfo)) {
                     logger.debug("apiAuthFilter: adding api " + realPath)
                     allApiDoc.addApi(api)
                   }
                 }
                 case fineGrainedApiAuthFilter: FineGrainedApiAuthorizationFilter => {
+                  logger.debug("YYYY case fineGrainedApiAuthFilter")
                   if (fineGrainedApiAuthFilter.authorizeResource(realPath, api, headers, uriInfo)) {
                     logger.debug("fineGrainedApiAuthFilter: adding api " + realPath)
                     allApiDoc.addApi(api)
@@ -138,6 +163,7 @@ trait ApiListing {
                 case _ =>
               }
             } else {
+              logger.debug("YYYYYYY apiFilter = NULL")
               allApiDoc.addApi(api)
             }
           }
@@ -160,5 +186,16 @@ trait ApiListing {
       }
     }
     isAdded
+  }
+
+  private def getProduceAnnotationRecursively(clazz: Class[_]): javax.ws.rs.Produces = {
+    if (clazz == null) return null;
+    logger.debug("YYYYYYY SEARCH FOR ANNOTATION @Produce in class: " + clazz.toString())
+    var produceAnnotation: javax.ws.rs.Produces = clazz.getAnnotation(classOf[javax.ws.rs.Produces])
+    if (produceAnnotation == null) {
+      val clazzTemp: Class[_ >: _] = clazz.getSuperclass
+      produceAnnotation = getProduceAnnotationRecursively(clazzTemp)
+    }
+    return produceAnnotation
   }
 }

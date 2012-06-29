@@ -20,12 +20,17 @@ import com.wordnik.swagger.core.Api
 
 import javax.ws.rs.{Produces, Path}
 
-@Path("/resources.json")
-@Api("/resources")
-@Produces(Array("application/json"))
-class ApiListingResourceJSON extends ApiListing
+//@Path("/resources.json")
+//@Api("/resources")
+//@Produces(Array("application/json"))
+//class ApiListingResourceJSON extends ApiListing
+//
+//@Path("/resources.xml")
+//@Api("/resources")
+//@Produces(Array("application/xml"))
+//class ApiListingResourceXML extends ApiListing
 
-@Path("/resources.xml")
+@Path("/resources")
 @Api("/resources")
-@Produces(Array("application/xml"))
-class ApiListingResourceXML extends ApiListing
+@Produces(Array("application/json", "application/xml"))
+class ApiListingResource extends ApiListing
